@@ -1,0 +1,24 @@
+# 运行时数据
+messages.json
+backups/
+
+# 日志
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 编辑器/系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 临时文件
+*.tmp
+*.bak
+*.bak_*

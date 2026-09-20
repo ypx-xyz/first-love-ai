@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>念念</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    background: #ededed;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app {
+    max-width: 480px;
+    margin: 0 auto;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: #ededed;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ===== 顶部标题栏 ===== */
+  .header {
+    background: #303030;
+    color: #fff;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  .header-back {
+    font-size: 22px;
+    color: #fff;
+    opacity: 0.8;
+    cursor: pointer;
+    width: 24px;
+    text-align: center;
+  }
+  .header-avatar {
+    width: 34px; height: 34px;
+    border-radius: 6px;
+    object-fit: cover;
+  }
+  .header-name {
+    font-size: 16px;
+    font-weight: 500;
+    flex: 1;
+  }
+  .header-more {
+    font-size: 20px;
+    opacity: 0.7;
+    cursor: pointer;
+  }
+
+  /* ===== 聊天区域 ===== */
+  .chat-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-behavior: smooth;
+  }
+  .chat-area::-webkit-scrollbar { width: 4px; }
+  .chat-area::-webkit-scrollbar-thumb { background: #ccc; border-radius: 2px; }
+
+  .time-divider {
+    text-align: center;
+    font-size: 11px;
+    color: #b2b2b2;
+    margin: 4px 0;
+  }
+
+  /* 消息行 */
+  .msg-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    max-width: 100%;
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .msg-row.right { flex-direction: row-reverse; }
+
+  .msg-avatar {
+    width: 38px; height: 38px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .bubble {
+    max-width: 72%;
+    padding: 9px 13px;
+    font-size: 15px;
+    line-height: 1.65;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    position: relative;
+  }
+  .bubble.left {
+    background: #fff;
+    border-radius: 4px 12px 12px 12px;
+    color: #1a1a1a;
+  }
+  .bubble.right {
+    background: #95ec69;
+    border-radius: 12px 4px 12px 12px;
+    color: #1a1a1a;
+  }
+
+  /* 陪伴者分享的图片 */
+  .msg-img {
+    margin-top: 8px;
+  }
+  .msg-img img {
+    max-width: 220px;
+    max-height: 220px;
+    border-radius: 8px;
+    display: block;
+    cursor: pointer;
+  }
+
+  /* 气泡小三角 */
+  .bubble.left::before {
+    content: '';
+    position: absolute;
+    left: -6px;
+    top: 12px;
+    border: 6px solid transparent;
+    border-right-color: #fff;
+    border-left: 0;
+  }
+  .bubble.right::before {
+    content: '';
+    position: absolute;
+    right: -6px;
+    top: 12px;
+    border: 6px solid transparent;
+    border-left-color: #95ec69;
+    border-right: 0;
+  }
+
+  /* 打字提示 */
+  .typing-indicator {
+    display: none;
+    padding: 10px 14px;
+  }
+  .typing-indicator.active { display: flex; }
+  .typing-dots {
+    display: flex;
+    gap: 4px;
+    background: #fff;
+    padding: 10px 14px;
+    border-radius: 4px 12px 12px 12px;
+    align-items: center;
+  }
+  .typing-dots span {
+    width: 6px; height: 6px;
+    background: #999;
+    border-radius: 50%;
+    animation: typing 1.2s infinite;
+  }
+  .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typing {
+    0%, 60%, 100% { transform: scale(0.8); opacity: 0.4; }
+    30% { transform: scale(1.2); opacity: 1; }
+  }
+
+  /* ===== 底部输入栏 ===== */
+  .input-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #f7f7f7;
+    border-top: 1px solid #ddd;
+    flex-shrink: 0;
+    padding-bottom: env(safe-area-inset-bottom, 8px);
+  }
+  .input-bar .icon {
+    font-size: 24px;
+    color: #666;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .input-field {
+    flex: 1;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 15px;
+    font-family: inherit;
+    resize: none;
+    max-height: 80px;
+    min-height: 36px;
+    line-height: 1.4;
+    background: #fff;
+    outline: none;
+  }
+  .input-field:focus { border-color: #07c160; }
+  .send-btn {
+    background: #07c160;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    flex-shrink: 0;
+    font-family: inherit;
+  }
+  .send-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+  }
+
+  /* 空状态 */
+  .empty-state {
+    text-align: center;
+    color: #999;
+    font-size: 13px;
+    padding: 40px 20px;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- 顶部 -->
+  <div class="header">
+    <div class="header-back">‹</div>
+    <img class="header-avatar" src="/static/avatar.png" alt="">
+    <div class="header-name">念念</div>
+    <div class="header-more">⋯</div>
+  </div>
+
+  <!-- 聊天区 -->
+  <div class="chat-area" id="chatArea">
+    <div class="empty-state" id="emptyState">还没有消息……</div>
+  </div>
+
+  <!-- 打字提示 -->
+  <div class="typing-indicator" id="typingIndicator">
+    <img class="msg-avatar" src="/static/avatar.png" alt="">
+    <div class="typing-dots"><span></span><span></span><span></span></div>
+  </div>
+
+  <!-- 输入栏 -->
+  <div class="input-bar">
+    <div class="icon">🎙️</div>
+    <textarea class="input-field" id="inputField" rows="1" placeholder="发消息"></textarea>
+    <div class="icon">😊</div>
+    <button class="send-btn" id="sendBtn">发送</button>
+  </div>
+</div>
+
+<script>
+const API = '/api/messages';
+const MAX_DOM = 800;        // 聊天区最多保留的渲染条数（防止 DOM 无限累积导致卡顿）
+let lastMsgId = '';         // 上次渲染的最后一条消息 id（用于增量拉取）
+let lastMsgCount = 0;       // 已渲染总条数
+let lastRenderedMsg = null; // 最后渲染的消息（用于时间分隔线判断）
+let isFirstLoad = true;      // 是否首次加载
+let savedScrollHeight = 0;   // 渲染前的滚动高度（用于判断是否在底部）
+
+// 格式化日期标签
+function formatDateLabel(dateStr) {
+  // 用本地时间拼日期，避免 toISOString(UTC) 在凌晨 0-8 点把当天错判为昨天
+  const pad = n => String(n).padStart(2, '0');
+  const d = new Date();
+  const today = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  const yd = new Date(d.getTime() - 86400000);
+  const yesterday = yd.getFullYear() + '-' + pad(yd.getMonth() + 1) + '-' + pad(yd.getDate());
+  if (dateStr === today) return '今天';
+  if (dateStr === yesterday) return '昨天';
+  // 格式化：2026-08-12 → 8月12日
+  const parts = dateStr.split('-');
+  return parseInt(parts[1]) + '月' + parseInt(parts[2]) + '日';
+}
+
+// 判断是否需要显示时间分隔线
+function shouldShowTime(prev, curr) {
+  if (!prev) return true;
+  const prevParts = prev.timestamp.split(' ');
+  const currParts = curr.timestamp.split(' ');
+  // 跨天必显示
+  if (prevParts[0] !== currParts[0]) return true;
+  // 同天间隔超过5分钟显示
+  const prevTime = new Date(prev.timestamp.replace(' ', 'T'));
+  const currTime = new Date(curr.timestamp.replace(' ', 'T'));
+  return (currTime - prevTime) > 5 * 60 * 1000;
+}
+
+// 表情代码 → 彩色 emoji 映射
+const emojiMap = {
+  '跪了':'🧎','晕':'😵‍💫','可爱':'🥰','微笑':'😊','哈哈':'😂','哈哈2':'🤣','允悲':'😅',
+  '泪':'😭','怒':'😠','doge':'🐶','狗头':'🐶','喵喵':'🐱','偷乐':'😏','馋嘴':'🤤',
+  '思考':'🤔','抱抱':'🤗','爱你':'❤️','亲亲':'😘','色':'😍','赞':'👍','鼓掌':'👏',
+  '吃瓜':'🍉','可怜':'😢','吐':'🤮','哼':'😤','偷笑':'😏','大笑':'🤣','羞羞':'😳',
+  '污':'🤭','打脸':'😱','不理':'😒','二哈':'🐺','憧憬':'🤩','心酸':'😔','委屈':'🥺',
+  '好运':'🍀','酷':'😎','汗':'😓','阴险':'😏','求饶':'🙏','加油':'💪','干杯':'🍻',
+  '并不简单':'🤔','挤眼':'😜','馋':'🤤','闭嘴':'🤐','耶':'✌️','冲呀':'🐛','伤心':'💔'
+};
+
+// 渲染文本：先转义HTML保证安全，再把 [表情] 替换成 emoji
+function renderText(text) {
+  let t = String(text)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  t = t.replace(/\[([^\]]+)\]/g, function(m, k) {
+    return emojiMap[k] ? emojiMap[k] : m;
+  });
+  return t;
+}
+
+// 创建消息元素
+function createMsgElement(msg) {
+  const isUser = msg.sender === 'user';
+  const row = document.createElement('div');
+  row.className = 'msg-row' + (isUser ? ' right' : '');
+
+  const avatar = document.createElement('img');
+  avatar.className = 'msg-avatar';
+  avatar.src = isUser ? '/static/avatar_me.png' : '/static/avatar.png';
+  avatar.onerror = function() {
+    this.style.display = 'none';
+  };
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble ' + (isUser ? 'right' : 'left');
+  bubble.innerHTML = renderText(msg.text);
+
+  // 若消息带图片（陪伴者分享的图片），在文字下方显示图片
+  if (msg.image) {
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'msg-img';
+    const img = document.createElement('img');
+    // image 为图片文件名，通过接口服务
+    let imgSrc = msg.image;
+    if (imgSrc.indexOf('/api/') !== 0) {
+      // 若传的是文件名，转成服务接口
+      const fn = imgSrc.split(/[\\\/]/).pop();
+      imgSrc = '/api/images/' + encodeURIComponent(fn);
+    }
+    img.src = imgSrc;
+    img.onclick = function() { window.open(imgSrc, '_blank'); };
+    imgWrap.appendChild(img);
+    bubble.appendChild(imgWrap);
+  }
+
+  row.appendChild(avatar);
+  row.appendChild(bubble);
+  return row;
+}
+
+// 全量渲染所有消息
+function renderAllMessages(messages) {
+  const area = document.getElementById('chatArea');
+  const empty = document.getElementById('emptyState');
+
+  if (messages.length === 0) {
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  // 记录渲染前的滚动位置
+  const wasNearBottom = (area.scrollHeight - area.scrollTop - area.clientHeight) < 100;
+
+  // 清空现有消息
+  area.innerHTML = '';
+
+  // 全量渲染
+  messages.forEach((msg, index) => {
+    // 时间分隔线
+    if (index === 0 || shouldShowTime(messages[index - 1], msg)) {
+      const parts = msg.timestamp.split(' ');
+      const dateStr = parts[0];
+      const timeStr = parts[1] || '';
+      const dateLabel = formatDateLabel(dateStr);
+      const divider = document.createElement('div');
+      divider.className = 'time-divider';
+      // 今天只显示时间，非今天显示日期+时间
+      if (dateLabel === '今天') {
+        divider.textContent = timeStr;
+      } else {
+        divider.textContent = dateLabel + ' ' + timeStr;
+      }
+      area.appendChild(divider);
+    }
+
+    area.appendChild(createMsgElement(msg));
+  });
+
+  lastMsgCount = messages.length;
+  if (messages.length) {
+    lastMsgId = messages[messages.length - 1].id;
+    lastRenderedMsg = messages[messages.length - 1];
+  }
+  trimDom();
+
+  // 首次加载或用户在底部附近时，滚动到底部
+  if (isFirstLoad || wasNearBottom) {
+    setTimeout(() => {
+      area.scrollTop = area.scrollHeight;
+    }, 50);
+  }
+
+  isFirstLoad = false;
+}
+
+// 控制聊天区 DOM 数量，防止无限累积导致卡顿
+function trimDom() {
+  const area = document.getElementById('chatArea');
+  const rows = area.querySelectorAll('.msg-row');
+  if (rows.length <= MAX_DOM) return;
+  const excess = rows.length - MAX_DOM;
+  for (let i = 0; i < excess; i++) {
+    const el = rows[i];
+    const prev = el.previousElementSibling;
+    // 若前一个兄弟是时间分隔线，一并移除，避免孤立
+    if (prev && prev.classList.contains('time-divider')) prev.remove();
+    el.remove();
+  }
+}
+
+// 增量渲染新消息（仅追加，不重绘）
+function appendNewMessages(newMsgs) {
+  const area = document.getElementById('chatArea');
+  const wasNearBottom = (area.scrollHeight - area.scrollTop - area.clientHeight) < 100;
+
+  newMsgs.forEach((msg) => {
+    if (!lastRenderedMsg || shouldShowTime(lastRenderedMsg, msg)) {
+      const parts = msg.timestamp.split(' ');
+      const dateStr = parts[0];
+      const timeStr = parts[1] || '';
+      const dateLabel = formatDateLabel(dateStr);
+      const divider = document.createElement('div');
+      divider.className = 'time-divider';
+      if (dateLabel === '今天') {
+        divider.textContent = timeStr;
+      } else {
+        divider.textContent = dateLabel + ' ' + timeStr;
+      }
+      area.appendChild(divider);
+    }
+    area.appendChild(createMsgElement(msg));
+    lastRenderedMsg = msg;
+  });
+
+  lastMsgCount += newMsgs.length;
+  if (newMsgs.length) lastMsgId = newMsgs[newMsgs.length - 1].id;
+  trimDom();
+
+  // 用户在底部附近时自动滚动
+  if (wasNearBottom) {
+    setTimeout(() => {
+      area.scrollTop = area.scrollHeight;
+    }, 50);
+  }
+}
+
+// 拉取消息
+async function fetchMessages() {
+  try {
+    // 增量拉取：只请求最后一条之后的
+    const url = lastMsgId ? API + '?since_id=' + encodeURIComponent(lastMsgId) : API;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (isFirstLoad) {
+      renderAllMessages(data);
+    } else if (data && data.needReset) {
+      // 消息被清理/重置 → 全量重载
+      renderAllMessages(data.messages);
+    } else if (data && data.length > 0) {
+      // 有增量 → 追加
+      appendNewMessages(data);
+    }
+  } catch (e) {
+    console.error('拉取消息失败', e);
+  }
+}
+
+// 发送消息
+async function sendMessage() {
+  const field = document.getElementById('inputField');
+  const text = field.value.trim();
+  if (!text) return;
+
+  const btn = document.getElementById('sendBtn');
+  btn.disabled = true;
+  field.value = '';
+  field.style.height = '36px';
+
+  try {
+    await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    await fetchMessages();
+  } catch (e) {
+    alert('发送失败，请检查服务是否运行');
+  } finally {
+    btn.disabled = false;
+    field.focus();
+  }
+}
+
+// 自动调整输入框高度
+const inputField = document.getElementById('inputField');
+inputField.addEventListener('input', function() {
+  this.style.height = '36px';
+  this.style.height = Math.min(this.scrollHeight, 80) + 'px';
+});
+
+// 回车发送（Shift+回车换行）
+inputField.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+document.getElementById('sendBtn').addEventListener('click', sendMessage);
+
+// 初始加载
+fetchMessages();
+
+// 轮询新消息（每15秒）
+setInterval(fetchMessages, 15000);
+</script>
+</body>
+</html>
