@@ -22,3 +22,6 @@ Thumbs.db
 *.tmp
 *.bak
 *.bak_*
+
+# 可选的学习进度配置
+learning.json
