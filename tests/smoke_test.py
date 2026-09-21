@@ -7,10 +7,14 @@
 3. 末条是用户消息      → has_reply=True、pending 正确
 4. 简报字段完整性与取值合法性
 5. --compact 与默认输出都能被解析为 JSON
+6. 脏数据（环 JSON）不导致崩溃
+7. app.py 的请求参数解析容错（extract_text / extract_image）
+8. app.py 的 load_messages 对损坏数据文件的降级
 
 用法：
     python tests/smoke_test.py     # 退出码 0 = 全部通过
 """
+import importlib.util
 import json
 import os
 import subprocess
@@ -98,6 +102,35 @@ def main():
                            errors='replace', timeout=60)
         check('坏 JSON 不导致崩溃', r.returncode == 0, f'退出码 {r.returncode}')
         check('坏 JSON 仍输出可用简报', json.loads(r.stdout)['has_reply'] is False)
+
+        print('[7] app.py 请求参数解析容错')
+        spec = importlib.util.spec_from_file_location('fla_app', os.path.join(ROOT, 'app.py'))
+        fla = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fla)
+        check('extract_text 正常取值并去空白', fla.extract_text({'text': '  hi  '}) == 'hi')
+        check('extract_text 数字→空串', fla.extract_text({'text': 123}) == '')
+        check('extract_text null→空串', fla.extract_text({'text': None}) == '')
+        check('extract_text 数组→空串', fla.extract_text({'text': ['a']}) == '')
+        check('extract_text 非字典→空串',
+              fla.extract_text(None) == '' and fla.extract_text(['x']) == '')
+        check('extract_image 正常取值', fla.extract_image({'image': 'a.png'}) == 'a.png')
+        check('extract_image 空白→None', fla.extract_image({'image': '   '}) is None)
+        check('extract_image 数字→None', fla.extract_image({'image': 123}) is None)
+        check('extract_image 缺字段→None', fla.extract_image({}) is None)
+
+        print('[8] load_messages 对损坏数据文件的降级')
+        bad_dir = os.path.join(tmp, 'broken')
+        os.makedirs(bad_dir, exist_ok=True)
+        bad_file = os.path.join(bad_dir, 'messages.json')
+        with open(bad_file, 'w', encoding='utf-8') as f:
+            f.write('{ not json')
+        fla.MESSAGES_FILE = bad_file
+        check('损坏 JSON 降级为空列表', fla.load_messages() == [])
+        with open(bad_file, 'w', encoding='utf-8') as f:
+            f.write('{"a": 1}')
+        check('结构不是列表时降级为空列表', fla.load_messages() == [])
+        fla.MESSAGES_FILE = os.path.join(bad_dir, 'not_exist.json')
+        check('文件不存在时返回空列表', fla.load_messages() == [])
 
     print()
     if failures:

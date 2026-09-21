@@ -67,7 +67,8 @@ first-love-ai/
 │   └── send_reply.py         # 注入陪伴者回复的示例脚本
 ├── tests/
 │   ├── smoke_test.py         # 单元测试（仅标准库）
-│   └── e2e_test.py           # 端到端测试（临时端口拉起服务）
+│   ├── e2e_test.py           # 端到端测试（临时端口拉起服务）
+│   └── launcher_test.py      # 启动器端口选择逻辑测试
 ├── .github/workflows/ci.yml  # CI：语法检查 + 两组测试（多 Python 版本）
 └── persona/                  # 人格机制（纯技术描述）
     ├── personify_prompt.md   # 通用人格蒸馏 prompt（离线）
@@ -165,11 +166,14 @@ python check_reply.py --compact  # 单行 JSON，便于管道处理
 
 ```bash
 python -m py_compile app.py check_reply.py launcher.py examples/send_reply.py
-python tests/smoke_test.py      # 单元测试：字段结构、时间字段、回复判定、图片回退
+python tests/smoke_test.py      # 单元测试：字段结构、回复判定、参数容错、脏数据降级
 python tests/e2e_test.py        # 端到端：随机空闲端口拉起真实服务，走完整链路
+python tests/launcher_test.py   # 启动器：端口上跑着别的程序时不被误判
 ```
 
-`e2e_test.py` 会在随机空闲端口拉起 `app.py`（数据目录指向临时目录，不污染仓库），依次验证发消息、空文本拒绝、注入回复、全量/增量拉取、统计、备份、图片服务与落盘。两项测试均以退出码 0 表示通过，同时由 GitHub Actions 在多个 Python 版本上自动执行（见顶部 CI 徽章）。
+`e2e_test.py` 会在随机空闲端口拉起 `app.py`（数据目录指向临时目录，不污染仓库），依次验证发消息、异常请求体拒绝、注入回复、全量/增量拉取、统计、备份、图片服务、落盘，以及数据文件损坏时的降级行为。三项测试均以退出码 0 表示通过，同时由 GitHub Actions 在多个 Python 版本上自动执行（见顶部 CI 徽章）。
+
+> **关于端口**：Windows 允许多个进程同时监听同一端口，Flask 也不会报错，请求会被路由到先启动的那个进程。所以 `launcher.py` 不会只看「端口有没有在监听」，而是确认端口上跑的到底是不是本应用：是就打开页面，不是就顺延换端口；`app.py` 启动前也会显式拦一道并提示换端口。测试时请始终使用随机空闲端口，不要用 5000。
 
 ## License
 

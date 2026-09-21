@@ -486,7 +486,7 @@ async function fetchMessages() {
     const res = await fetch(url);
     const data = await res.json();
     if (isFirstLoad) {
-      renderAllMessages(data);
+      renderAllMessages(Array.isArray(data) ? data : []);
     } else if (data && data.needReset) {
       // 消息被清理/重置 → 全量重载
       renderAllMessages(data.messages);
@@ -511,14 +511,23 @@ async function sendMessage() {
   field.style.height = '36px';
 
   try {
-    await fetch(API, {
+    const res = await fetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text })
     });
+    if (!res.ok) {
+      // 后端以 4xx/5xx 响应时 fetch 不会抛错，不检查就会「静默失败」
+      let why = '';
+      try {
+        const err = await res.json();
+        why = (err && err.error) || '';
+      } catch (e) { /* 响应不是 JSON，忽略 */ }
+      throw new Error(why || ('HTTP ' + res.status));
+    }
     await fetchMessages();
   } catch (e) {
-    alert('发送失败，请检查服务是否运行');
+    alert('发送失败：' + e.message);
   } finally {
     btn.disabled = false;
     field.focus();

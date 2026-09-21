@@ -41,3 +41,8 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
         run: python tests/e2e_test.py
+
+      - name: Launcher port tests (launcher_test.py)
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python tests/launcher_test.py

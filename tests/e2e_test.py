@@ -38,13 +38,19 @@ def free_port():
         return s.getsockname()[1]
 
 
-def req(url, method='GET', payload=None):
-    """返回 (status_code, parsed_body)。HTTP 错误不抛异常，返回码交给用例判断。"""
+def req(url, method='GET', payload=None, raw=None, ctype='application/json'):
+    """返回 (status_code, parsed_body)。HTTP 错误不抛异常，返回码交给用例判断。
+
+    raw 用于发送非 JSON 的原始请求体；ctype=None 表示不带 Content-Type 头。
+    """
     data = None
     headers = {}
-    if payload is not None:
+    if raw is not None:
+        data = raw
+    elif payload is not None:
         data = json.dumps(payload).encode('utf-8')
-        headers['Content-Type'] = 'application/json'
+    if data is not None and ctype:
+        headers['Content-Type'] = ctype
     r = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(r, timeout=10) as resp:
@@ -106,6 +112,20 @@ def main():
             code, _ = req(base + '/api/messages', 'POST', {'text': '   '})
             check('空文本返回 400', code == 400, f'实际 {code}')
 
+            print('[3b] 异常请求体应返回 400，而不是 500')
+            code, _ = req(base + '/api/messages', 'POST', payload={'text': 123})
+            check('text 为数字返回 400', code == 400, f'实际 {code}')
+            code, _ = req(base + '/api/messages', 'POST', payload={'text': None})
+            check('text 为 null 返回 400', code == 400, f'实际 {code}')
+            code, _ = req(base + '/api/messages', 'POST', payload={'text': ['a']})
+            check('text 为数组返回 400', code == 400, f'实际 {code}')
+            code, _ = req(base + '/api/messages', 'POST', raw=b'not json')
+            check('非法 JSON 返回 400', code == 400, f'实际 {code}')
+            code, _ = req(base + '/api/messages', 'POST', raw=b'', ctype=None)
+            check('空 body 且无 Content-Type 返回 400', code == 400, f'实际 {code}')
+            code, _ = req(base + '/api/messages/assistant', 'POST', payload={'text': 123})
+            check('assistant 接口 text 非字符串返回 400', code == 400, f'实际 {code}')
+
             print('[4] 注入陪伴者回复')
             code, a1 = req(base + '/api/messages/assistant', 'POST', {'text': '在'})
             check('POST /api/messages/assistant 返回 200', code == 200, f'实际 {code}')
@@ -141,6 +161,23 @@ def main():
             if os.path.exists(path):
                 with open(path, encoding='utf-8') as f:
                     check('落盘消息数为 3', len(json.load(f)) == 3)
+
+            print('[9] 数据文件异常时的健壮性（不应 500）')
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump([{'id': 'x', 'text': '缺 sender'}], f, ensure_ascii=False)
+            code, st = req(base + '/api/stats')
+            check('消息缺 sender 字段时 /api/stats 返回 200', code == 200, f'实际 {code}')
+
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write('{ 这不是合法 json')
+            code, msgs = req(base + '/api/messages')
+            check('messages.json 损坏时 /api/messages 返回 200', code == 200, f'实际 {code}')
+            check('损坏时降级为空列表', msgs == [], f'实际 {msgs}')
+            code, st = req(base + '/api/stats')
+            check('损坏时 /api/stats 返回 200', code == 200, f'实际 {code}')
+
+            print('[10] 端口安全')
+            check('本用例使用随机端口而非 5000（避免撞上用户真实服务）', port != 5000, f'实际 {port}')
 
         finally:
             proc.terminate()

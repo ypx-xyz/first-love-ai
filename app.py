@@ -10,6 +10,8 @@
 """
 import json
 import os
+import socket
+import sys
 import uuid
 import shutil
 import threading
@@ -61,10 +63,40 @@ def _backup_current():
         pass  # 备份失败不阻断主流程
 
 def load_messages():
+    """读消息列表。文件不存在、损坏或结构不对时一律降级为空列表。
+
+    不直接抛异常的原因：数据文件可能被外部工具改坏，此时整个服务 500
+    会让人无从下手；降级为空列表后服务仍可用，且写前备份里还留着旧数据。
+    """
     if not os.path.exists(MESSAGES_FILE):
         return []
-    with open(MESSAGES_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    try:
+        with open(MESSAGES_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except (ValueError, OSError) as e:
+        app.logger.warning('messages.json 读取失败，按空列表处理：%s', e)
+        return []
+    return data if isinstance(data, list) else []
+
+def extract_text(data):
+    """从请求体里安全取出 text：非字符串（数字 / null / 嵌套对象）一律视为空。
+
+    直接写 data.get('text', '').strip() 会在 text 是数字时抛 AttributeError，
+    未捕获就变成 500。这里统一返回空串，由调用方回 400。
+    """
+    if not isinstance(data, dict):
+        return ''
+    text = data.get('text', '')
+    return text.strip() if isinstance(text, str) else ''
+
+def extract_image(data):
+    """同理安全取出 image 文件名；非字符串一律视为未提供。"""
+    if not isinstance(data, dict):
+        return None
+    image = data.get('image', '')
+    if not isinstance(image, str):
+        return None
+    return image.strip() or None
 
 def save_messages(messages):
     """原子写：先写临时文件再 os.replace 替换，避免并发读到半写文件；写前自动备份。"""
@@ -94,8 +126,10 @@ def get_messages():
 
 @app.route('/api/messages', methods=['POST'])
 def send_message():
-    data = request.get_json()
-    text = data.get('text', '').strip()
+    # silent=True：请求体不是合法 JSON / 缺 Content-Type 时返回 None，
+    # 而不是抛 415 —— 统一由下面的类型校验回 400，前端只处理一种错误形态。
+    data = request.get_json(silent=True)
+    text = extract_text(data)
     if not text:
         return jsonify({'error': '消息不能为空'}), 400
 
@@ -115,11 +149,11 @@ def send_message():
 def add_assistant_message():
     """供外部进程/AI 调用：注入陪伴者(assistant)的回复。
     text 必填；image 可选，指向 static/images/ 下的文件名。"""
-    data = request.get_json()
-    text = data.get('text', '').strip()
+    data = request.get_json(silent=True)
+    text = extract_text(data)
     if not text:
         return jsonify({'error': '消息不能为空'}), 400
-    image = data.get('image', '').strip() or None
+    image = extract_image(data)
 
     with _messages_lock:
         messages = load_messages()
@@ -143,8 +177,9 @@ def serve_image(filename):
 @app.route('/api/stats')
 def stats():
     messages = load_messages()
-    assistant_count = sum(1 for m in messages if m['sender'] == 'assistant')
-    user_count = sum(1 for m in messages if m['sender'] == 'user')
+    # 用 .get 而非 []：数据文件可能被外部工具改过，缺字段不应导致 500
+    assistant_count = sum(1 for m in messages if m.get('sender') == 'assistant')
+    user_count = sum(1 for m in messages if m.get('sender') == 'user')
     last_msg = messages[-1] if messages else None
     return jsonify({
         'total': len(messages),
@@ -161,6 +196,23 @@ def list_backups():
     files = sorted((f for f in os.listdir(BACKUP_DIR) if f.startswith('messages_backup_')), reverse=True)
     return jsonify({'backups': files})
 
+def port_in_use(port):
+    """端口上是否已有进程在监听。"""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(1)
+        try:
+            s.connect(('127.0.0.1', port))
+            return True
+        except OSError:
+            return False
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
+    # Windows 下多个进程可以同时监听同一端口，Flask 不会报错，
+    # 但请求会被路由到先启动的那个进程——直接起会静默地「帮别人接客」。
+    # 这里显式拦一道，并提示换端口。
+    if port_in_use(port):
+        print(f'[错误] 端口 {port} 已被占用（可能是本应用已在运行，也可能是其他程序）。')
+        print(f'       请改用其他端口，例如：set PORT=5100 && python app.py')
+        sys.exit(1)
     app.run(host='127.0.0.1', port=port, debug=False)

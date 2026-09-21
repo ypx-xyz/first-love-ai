@@ -146,8 +146,6 @@ def build_report(data_dir):
             break
     pending.reverse()
 
-    recent_replies = [render(m) for m in messages
-                      if m.get('sender') == 'assistant']
     # 只留最近 N 天的回复（无时间戳的保守保留）
     recent = []
     for m in messages:
