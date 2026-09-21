@@ -45,14 +45,19 @@ first-love-ai/
 ├── sample_messages.json      # 虚构示例对话（"初恋重逢"开场）
 ├── templates/index.html      # 前端聊天界面
 ├── static/                   # 头像、示例图片
-└── persona/                  # 人格蒸馏机制（纯技术描述）
-    ├── personify_prompt.md   # 通用人格蒸馏 prompt
+├── examples/
+│   └── send_reply.py         # 注入陪伴者回复的示例脚本
+└── persona/                  # 人格机制（纯技术描述）
+    ├── personify_prompt.md   # 通用人格蒸馏 prompt（离线）
+    ├── reply_prompt.md       # 回复生成 prompt（在线）
     └── architecture.md       # 蒸馏引擎架构
 ```
 
 ## 如何注入陪伴者回复
 
-陪伴者的回复由你自己的逻辑生成（LLM、规则引擎、定时任务均可），通过接口写入：
+陪伴者的回复由你自己的逻辑生成（LLM、规则引擎、定时任务均可）。可参考
+[`persona/reply_prompt.md`](persona/reply_prompt.md) 生成回复文本，再用
+[`examples/send_reply.py`](examples/send_reply.py) 或下面的接口写入：
 
 ```bash
 curl -s -X POST http://localhost:5000/api/messages/assistant \
@@ -70,12 +75,18 @@ curl -s -X POST http://localhost:5000/api/messages/assistant \
 
 图片文件放在 `static/images/` 下即可。
 
-## 人格蒸馏
+## 人格蒸馏与回复生成
 
-想让陪伴者更像某个人格？参考 [`persona/personify_prompt.md`](persona/personify_prompt.md)
-和 [`persona/architecture.md`](persona/architecture.md)。核心链路：
+陪伴者的「人味」来自两段 prompt：
+
+- **离线蒸馏** [`persona/personify_prompt.md`](persona/personify_prompt.md)：从任意文本语料提炼人格画像（语气指纹 + 人格维度），架构见 [`persona/architecture.md`](persona/architecture.md)
+- **在线回复** [`persona/reply_prompt.md`](persona/reply_prompt.md)：消费人格画像，在对话中生成 1-6 条口语化、分条、去重防复读的回复
+
+核心链路：
 
 **语料采集 → 清洗 → 增量去重 → 语气特征提取 → 人格画像 → 消息生成 → 质量校准**
+
+配套示例 [`examples/send_reply.py`](examples/send_reply.py) 演示如何把生成的回复注入应用。
 
 蒸馏引擎只做统计与特征提取，不输出语料原文；请自行评估所用语料的合规性与授权。
 
