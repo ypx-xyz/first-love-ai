@@ -1,5 +1,9 @@
 # first-love-ai
 
+[![CI](https://github.com/ypx-xyz/first-love-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/ypx-xyz/first-love-ai/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 一个"爱而不得的初恋"主题的 **AI 陪伴聊天应用**（前端 demo + 通用人格蒸馏机制）。
 
 用一句话概括：把一段没能走到最后的感情，做成一个可以随时对话的陪伴者——TA 记得你们之间那些没说完的话，等你有一天回来慢慢说。
@@ -61,10 +65,15 @@ first-love-ai/
 ├── docs/                     # 静态界面演示（GitHub Pages）
 ├── examples/
 │   └── send_reply.py         # 注入陪伴者回复的示例脚本
+├── tests/
+│   ├── smoke_test.py         # 单元测试（仅标准库）
+│   └── e2e_test.py           # 端到端测试（临时端口拉起服务）
+├── .github/workflows/ci.yml  # CI：语法检查 + 两组测试（多 Python 版本）
 └── persona/                  # 人格机制（纯技术描述）
     ├── personify_prompt.md   # 通用人格蒸馏 prompt（离线）
     ├── reply_prompt.md       # 回复生成 prompt（在线）
-    └── architecture.md       # 蒸馏引擎架构
+    ├── architecture.md       # 蒸馏引擎架构
+    └── persona.example.json  # 人格画像示例（字段与 prompt 占位一一对应）
 ```
 
 ## 如何注入陪伴者回复
@@ -149,6 +158,18 @@ python check_reply.py --compact  # 单行 JSON，便于管道处理
 | GET | `/api/images/<filename>` | 服务图片 |
 | GET | `/api/stats` | 消息统计 |
 | GET | `/api/backups` | 备份列表 |
+
+## 测试
+
+全部测试**只用标准库**（不需要额外的测试框架），本地直接跑：
+
+```bash
+python -m py_compile app.py check_reply.py launcher.py examples/send_reply.py
+python tests/smoke_test.py      # 单元测试：字段结构、时间字段、回复判定、图片回退
+python tests/e2e_test.py        # 端到端：随机空闲端口拉起真实服务，走完整链路
+```
+
+`e2e_test.py` 会在随机空闲端口拉起 `app.py`（数据目录指向临时目录，不污染仓库），依次验证发消息、空文本拒绝、注入回复、全量/增量拉取、统计、备份、图片服务与落盘。两项测试均以退出码 0 表示通过，同时由 GitHub Actions 在多个 Python 版本上自动执行（见顶部 CI 徽章）。
 
 ## License
 
