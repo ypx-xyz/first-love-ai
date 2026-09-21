@@ -30,7 +30,7 @@ jobs:
 
       - name: Syntax check
         run: |
-          python -m py_compile app.py check_reply.py launcher.py examples/send_reply.py
+          python -m py_compile app.py check_reply.py reply.py launcher.py examples/send_reply.py
 
       - name: Unit tests (smoke_test.py)
         env:
@@ -46,3 +46,8 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
         run: python tests/launcher_test.py
+
+      - name: LLM reply chain tests (llm_reply_test.py)
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python tests/llm_reply_test.py

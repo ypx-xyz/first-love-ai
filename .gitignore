@@ -25,3 +25,6 @@ Thumbs.db
 
 # 可选的学习进度配置
 learning.json
+
+# 本地真实人格画像（含个人语料蒸馏结果，不入库）
+persona/persona.json

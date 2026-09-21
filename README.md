@@ -57,6 +57,7 @@ python app.py
 first-love-ai/
 ├── app.py                    # Flask 后端（通用聊天 API）
 ├── check_reply.py            # 回复前置检查：输出上下文简报（JSON）
+├── reply.py                  # 回复链路：检查 → 调 LLM 生成 → 写回聊天页
 ├── launcher.py               # Windows 启动器
 ├── requirements.txt          # 依赖
 ├── sample_messages.json      # 虚构示例对话（"初恋重逢"开场）
@@ -68,8 +69,9 @@ first-love-ai/
 ├── tests/
 │   ├── smoke_test.py         # 单元测试（仅标准库）
 │   ├── e2e_test.py           # 端到端测试（临时端口拉起服务）
-│   └── launcher_test.py      # 启动器端口选择逻辑测试
-├── .github/workflows/ci.yml  # CI：语法检查 + 两组测试（多 Python 版本）
+│   ├── launcher_test.py      # 启动器端口选择逻辑测试
+│   └── llm_reply_test.py     # 回复链路测试（假 LLM + 假聊天服务，不联网）
+├── .github/workflows/ci.yml  # CI：语法检查 + 四组测试（多 Python 版本）
 └── persona/                  # 人格机制（纯技术描述）
     ├── personify_prompt.md   # 通用人格蒸馏 prompt（离线）
     ├── reply_prompt.md       # 回复生成 prompt（在线）
@@ -123,6 +125,61 @@ python check_reply.py --compact  # 单行 JSON，便于管道处理
 
 脚本**只读不写**、不联网、不调用 LLM，仅依赖标准库，可安全高频运行。
 
+## 接入真实 LLM：reply.py
+
+[`persona/reply_prompt.md`](persona/reply_prompt.md) 是「怎么生成」的规范，`reply.py` 是把规范跑起来的那条链路：
+
+```
+check_reply.build_report()            # 只读检查：待回复 / 上下文 / 防复读 / 候选图
+        ↓
+reply_prompt.md + persona.json        # 组装 system / user 两条消息
+        ↓
+POST {LLM_BASE_URL}/chat/completions  # OpenAI 兼容接口，默认 DeepSeek
+        ↓
+POST {CHAT_BASE_URL}/api/messages/assistant   # 逐条写回聊天页
+```
+
+### 用法
+
+```bash
+export LLM_API_KEY=sk-xxxx            # Windows: set LLM_API_KEY=sk-xxxx
+
+python reply.py --dry-run             # 只打印将要发送的提示词，不调用 LLM、不写入
+python reply.py                       # 完整链路：检查 → 生成 → 写回聊天页
+python reply.py --print-only          # 调用 LLM 但只打印结果，满意再写入
+```
+
+### 环境变量
+
+| 变量 | 必填 | 默认值 | 说明 |
+|---|---|---|---|
+| `LLM_API_KEY` | 是 | — | 接口密钥，**只从环境变量读** |
+| `LLM_BASE_URL` | 否 | `https://api.deepseek.com/v1` | 任何 OpenAI 兼容接口均可，如本地 ollama 的 `http://127.0.0.1:11434/v1` |
+| `LLM_MODEL` | 否 | `deepseek-chat` | 模型名 |
+| `LLM_TIMEOUT` | 否 | `90` | 单次请求超时（秒） |
+| `LLM_TEMPERATURE` | 否 | `1.0` | 采样温度 |
+| `CHAT_BASE_URL` | 否 | `http://127.0.0.1:5000` | 聊天服务地址 |
+| `CHAT_DATA_DIR` | 否 | 仓库目录 | 数据目录（内含 `messages.json`） |
+
+换提供方只需改前三个变量，不动代码。需要显式 JSON 模式（部分服务要求）加 `--json-mode`；不开也能跑——解析器会从 Markdown 代码块或前后说明文字里把 JSON 抠出来。
+
+### 退出码
+
+| 码 | 含义 |
+|---|---|
+| `0` | 正常（含最常见的「无待回复消息、未调用 LLM」） |
+| `1` | 配置问题（缺 API key / 提示词或人格文件缺失） |
+| `2` | LLM 调用失败，或输出无法解析 |
+| `3` | 回复已生成但写回聊天服务失败（原文会打印出来，可手工补发） |
+
+### 为什么是独立脚本，而不是服务内自动回复
+
+`reply_prompt.md` 的分批节奏、防复读窗口、时段规则都建立在「**无新消息直接结束是常态**」之上；用户一发消息就即时回，会把这套节奏冲掉。所以它刻意不做成服务内钩子，而是独立进程——手动跑、挂定时任务、接自己的编排都可以。
+
+### 隐私提示
+
+真实人格画像请放 `persona/persona.json`：该文件已在 `.gitignore` 中，不会入库，仓库只保留 `persona/persona.example.json` 这份虚构示例。密钥一律走环境变量，不写进任何文件。
+
 ## 人格蒸馏与回复生成
 
 陪伴者的「人味」来自两段 prompt：
@@ -165,13 +222,14 @@ python check_reply.py --compact  # 单行 JSON，便于管道处理
 全部测试**只用标准库**（不需要额外的测试框架），本地直接跑：
 
 ```bash
-python -m py_compile app.py check_reply.py launcher.py examples/send_reply.py
+python -m py_compile app.py check_reply.py reply.py launcher.py examples/send_reply.py
 python tests/smoke_test.py      # 单元测试：字段结构、回复判定、参数容错、脏数据降级
 python tests/e2e_test.py        # 端到端：随机空闲端口拉起真实服务，走完整链路
 python tests/launcher_test.py   # 启动器：端口上跑着别的程序时不被误判
+python tests/llm_reply_test.py  # 回复链路：假 LLM + 假聊天服务，不联网不花钱
 ```
 
-`e2e_test.py` 会在随机空闲端口拉起 `app.py`（数据目录指向临时目录，不污染仓库），依次验证发消息、异常请求体拒绝、注入回复、全量/增量拉取、统计、备份、图片服务、落盘，以及数据文件损坏时的降级行为。三项测试均以退出码 0 表示通过，同时由 GitHub Actions 在多个 Python 版本上自动执行（见顶部 CI 徽章）。
+`e2e_test.py` 会在随机空闲端口拉起 `app.py`（数据目录指向临时目录，不污染仓库），依次验证发消息、异常请求体拒绝、注入回复、全量/增量拉取、统计、备份、图片服务、落盘，以及数据文件损坏时的降级行为。四项测试均以退出码 0 表示通过，同时由 GitHub Actions 在多个 Python 版本上自动执行（见顶部 CI 徽章）。`llm_reply_test.py` 用进程内起的假 LLM 与假聊天服务把整条链路跑通——含正常生成、提示词组装、`--dry-run` / `--print-only`、缺密钥、LLM 报错、输出非法、写回失败等分支，全程不联网、不消耗额度。
 
 > **关于端口**：Windows 允许多个进程同时监听同一端口，Flask 也不会报错，请求会被路由到先启动的那个进程。所以 `launcher.py` 不会只看「端口有没有在监听」，而是确认端口上跑的到底是不是本应用：是就打开页面，不是就顺延换端口；`app.py` 启动前也会显式拦一道并提示换端口。测试时请始终使用随机空闲端口，不要用 5000。
 
