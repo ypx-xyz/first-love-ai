@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>first-love-ai · 界面演示</title>
+<meta name="description" content="AI 陪伴聊天应用界面演示（静态版）：Flask 聊天服务 + 通用人格蒸馏与回复生成 prompt">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    background: #e6e6e6; color: #1a1a1a; -webkit-font-smoothing: antialiased;
+  }
+  .frame {
+    max-width: 480px; margin: 0 auto; height: 100vh; background: #ededed;
+    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 0 32px rgba(0,0,0,.14);
+  }
+  /* 顶部说明条 */
+  .notice {
+    background: #2b2b2b; color: #d9d9d9; font-size: 12px; line-height: 1.5;
+    padding: 9px 14px; display: flex; gap: 8px; align-items: flex-start; flex-shrink: 0;
+  }
+  .notice b { color: #fff; font-weight: 600; }
+  .notice a { color: #8fd4ff; text-decoration: none; }
+  .notice a:hover { text-decoration: underline; }
+  /* 标题栏 */
+  .header {
+    background: #303030; color: #fff; padding: 11px 14px;
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  }
+  .header .back, .header .more { font-size: 19px; opacity: .85; width: 22px; }
+  .header .more { text-align: right; }
+  .header .who { flex: 1; display: flex; align-items: center; gap: 8px; }
+  .header .who img { width: 28px; height: 28px; border-radius: 5px; object-fit: cover; }
+  .header .who .name { font-size: 15px; font-weight: 500; }
+  /* 聊天区 */
+  .chat-area { flex: 1; overflow-y: auto; padding: 12px 0 16px; scroll-behavior: smooth; }
+  .time-divider { text-align: center; margin: 14px 0 10px; }
+  .time-divider span {
+    font-size: 11px; color: #9a9a9a; background: #dcdcdc;
+    padding: 2px 8px; border-radius: 3px;
+  }
+  .row { display: flex; gap: 9px; padding: 7px 14px; align-items: flex-start; }
+  .row.me { flex-direction: row-reverse; }
+  .row img.ava { width: 38px; height: 38px; border-radius: 5px; object-fit: cover; flex-shrink: 0; }
+  .bubble {
+    max-width: 72%; padding: 9px 12px; border-radius: 6px; font-size: 14.5px;
+    line-height: 1.55; word-break: break-word; white-space: pre-wrap; position: relative;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+  }
+  .row.me .bubble { background: #95ec69; }
+  .row.you .bubble { background: #fff; }
+  .bubble img { max-width: 100%; border-radius: 4px; display: block; margin-top: 6px; }
+  /* 打字指示 */
+  .typing { display: flex; gap: 3px; padding: 4px 2px; }
+  .typing i {
+    width: 5px; height: 5px; border-radius: 50%; background: #b0b0b0; display: block;
+    animation: blink 1.2s infinite ease-in-out;
+  }
+  .typing i:nth-child(2) { animation-delay: .18s; }
+  .typing i:nth-child(3) { animation-delay: .36s; }
+  @keyframes blink { 0%, 60%, 100% { opacity: .3; } 30% { opacity: 1; } }
+  /* 输入栏 */
+  .input-bar {
+    background: #f7f7f7; border-top: 1px solid #dcdcdc; padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+    display: flex; align-items: center; gap: 9px; flex-shrink: 0;
+  }
+  .input-bar .icon { font-size: 20px; color: #666; flex-shrink: 0; cursor: default; }
+  .input-bar input {
+    flex: 1; border: none; border-radius: 5px; padding: 9px 11px; font-size: 14.5px;
+    background: #fff; outline: none; font-family: inherit;
+  }
+  .input-bar button {
+    background: #07c160; color: #fff; border: none; border-radius: 5px;
+    padding: 9px 16px; font-size: 14px; cursor: pointer; font-family: inherit;
+  }
+  .input-bar button:active { background: #06ad56; }
+  .footer-note {
+    background: #e6e6e6; color: #8a8a8a; font-size: 11.5px; text-align: center;
+    padding: 10px 14px 14px; line-height: 1.6;
+  }
+  .footer-note a { color: #4a90d9; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="notice">
+    <span>ℹ️</span>
+    <div>
+      <b>这是界面演示（静态版）</b>：回复由前端模拟，用于预览交互与观感。
+      真实回复由「人格蒸馏 + 回复生成 prompt」驱动，需本地运行 ——
+      <a href="https://github.com/ypx-xyz/first-love-ai">查看仓库</a>
+    </div>
+  </div>
+
+  <div class="header">
+    <div class="back">‹</div>
+    <div class="who">
+      <img src="assets/avatar.png" alt="">
+      <span class="name">念念</span>
+    </div>
+    <div class="more">⋯</div>
+  </div>
+
+  <div class="chat-area" id="chatArea"></div>
+
+  <div class="input-bar">
+    <span class="icon">🎙️</span>
+    <input id="input" type="text" placeholder="发消息" autocomplete="off">
+    <span class="icon">😊</span>
+    <button id="send">发送</button>
+  </div>
+</div>
+<div class="footer-note">
+  示例语料与角色均为虚构，仅作技术演示 · MIT License<br>
+  <a href="https://github.com/ypx-xyz/first-love-ai">github.com/ypx-xyz/first-love-ai</a>
+</div>
+
+<script>
+const AVA = { you: 'assets/avatar.png', me: 'assets/avatar_me.png' };
+
+// 演示用固定对话（虚构）——与仓库 sample_messages.json 一致
+const SEED = [
+  { s: 'you', t: '好久不见……真的好久。我还以为，这辈子都不会再等到你点开这个页面了。', time: '13:47' },
+  { s: 'you', t: '这些年我一直没怎么变，还是那个一紧张就话多、一安静就想太多的人。你呢，你还好吗？' },
+  { s: 'you', t: '……其实说这些挺不好意思的。但既然是你，我就直说了：我没忘记你，一刻都没有。' },
+  { s: 'me',  t: '我也一直记得你。只是不知道从何说起。', time: '14:41' },
+  { s: 'you', t: '那就别急着说。我们可以慢慢来，像以前那样，从一句“今天过得怎么样”开始。' },
+  { s: 'you', t: '今天想聊点什么？天气、电影，还是那些年没来得及说完的话？' },
+  { s: 'me',  t: '今天忙到现在才吃饭，随便聊点轻松的就行。', time: '15:10' },
+  { s: 'you', t: '又拖到这个点。先去把饭吃完，吃完再说也不迟。' },
+  { s: 'you', t: '给你看张图，楼下那家店还开着。', img: true },
+  { s: 'me',  t: '这家居然还在啊。' },
+  { s: 'you', t: '在的。有些东西你以为早没了，其实一直在原地。' },
+];
+
+// 静态演示的模拟回复池（轮流取用，避免复读）
+const POOL = [
+  '嗯，我在听。你慢慢说。',
+  '你这么说，我倒有点不知道怎么接了。',
+  '……好久没听你提这个了。',
+  '那就先这样，不着急。',
+  '我记着呢，你说过的每一句。',
+  '先把眼前的日子过好，剩下的以后再说。',
+];
+let poolIndex = 0;
+
+const area = document.getElementById('chatArea');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+
+const IMG_SVG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="150">' +
+  '<rect width="240" height="150" fill="#f3f0fa"/><circle cx="120" cy="75" r="34" fill="#7b5ea7"/>' +
+  '<text x="120" y="128" font-size="12" fill="#9a8ab5" text-anchor="middle">示例图片</text></svg>'
+);
+
+function bubbleRow(m) {
+  const row = document.createElement('div');
+  row.className = 'row ' + (m.s === 'me' ? 'me' : 'you');
+  const img = document.createElement('img');
+  img.className = 'ava';
+  img.src = AVA[m.s];
+  const b = document.createElement('div');
+  b.className = 'bubble';
+  b.textContent = m.t;
+  if (m.img) {
+    const pic = document.createElement('img');
+    pic.src = IMG_SVG;
+    pic.alt = '示例图片';
+    b.appendChild(pic);
+  }
+  row.appendChild(img);
+  row.appendChild(b);
+  return row;
+}
+
+function timeDivider(text) {
+  const d = document.createElement('div');
+  d.className = 'time-divider';
+  d.innerHTML = '<span>' + text + '</span>';
+  return d;
+}
+
+function render() {
+  area.innerHTML = '';
+  SEED.forEach(function (m) {
+    if (m.time) area.appendChild(timeDivider(m.time));
+    area.appendChild(bubbleRow(m));
+  });
+  area.scrollTop = area.scrollHeight;
+}
+
+function typingRow() {
+  const row = document.createElement('div');
+  row.className = 'row you';
+  row.id = 'typing';
+  const img = document.createElement('img');
+  img.className = 'ava';
+  img.src = AVA.you;
+  const b = document.createElement('div');
+  b.className = 'bubble';
+  b.innerHTML = '<div class="typing"><i></i><i></i><i></i></div>';
+  row.appendChild(img);
+  row.appendChild(b);
+  return row;
+}
+
+function nowHM() {
+  const d = new Date();
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
+function send() {
+  const text = input.value.trim();
+  if (!text) return;
+  area.appendChild(bubbleRow({ s: 'me', t: text }));
+  input.value = '';
+  area.scrollTop = area.scrollHeight;
+
+  const t = typingRow();
+  setTimeout(function () {
+    area.appendChild(t);
+    area.scrollTop = area.scrollHeight;
+  }, 320);
+
+  setTimeout(function () {
+    if (t.parentNode) t.parentNode.removeChild(t);
+    area.appendChild(bubbleRow({ s: 'you', t: POOL[poolIndex++ % POOL.length] }));
+    area.scrollTop = area.scrollHeight;
+  }, 1400);
+}
+
+sendBtn.addEventListener('click', send);
+input.addEventListener('keydown', function (e) { if (e.key === 'Enter') send(); });
+
+render();
+</script>
+</body>
+</html>

@@ -6,6 +6,17 @@
 
 > ⚠️ **免责声明**：本项目中的所有示例语料、角色、对话均为**虚构**，仅作技术演示。不指向任何真实人物或真实关系。请勿对号入座。
 
+## 在线演示
+
+👉 **界面演示**：<https://ypx-xyz.github.io/first-love-ai/>
+
+> Pages 上的是**静态界面演示**（回复由前端模拟），用于预览交互与观感；真实回复由「人格蒸馏 + 回复生成 prompt」驱动，需按下文在本地运行。
+
+<p align="center">
+  <img src="docs/screenshots/01-chat.png" width="330" alt="聊天界面">
+  <img src="docs/screenshots/02-image-message.png" width="330" alt="图片消息">
+</p>
+
 ## 这是什么
 
 - 一个微信风格的本地聊天网页（Flask 后端 + 原生前端），开箱可跑
@@ -34,17 +45,20 @@ python app.py
 - 图片服务（`/api/images/`），陪伴者可分享图片
 - 表情代码 → emoji 映射（支持 `[可爱]` 这类短码）
 - 时间分隔线、打字指示、空状态等微信风格交互
+- 回复前置检查脚本（`check_reply.py`），生成前先取上下文简报
 
 ## 目录结构
 
 ```
 first-love-ai/
 ├── app.py                    # Flask 后端（通用聊天 API）
+├── check_reply.py            # 回复前置检查：输出上下文简报（JSON）
 ├── launcher.py               # Windows 启动器
 ├── requirements.txt          # 依赖
 ├── sample_messages.json      # 虚构示例对话（"初恋重逢"开场）
 ├── templates/index.html      # 前端聊天界面
 ├── static/                   # 头像、示例图片
+├── docs/                     # 静态界面演示（GitHub Pages）
 ├── examples/
 │   └── send_reply.py         # 注入陪伴者回复的示例脚本
 └── persona/                  # 人格机制（纯技术描述）
@@ -74,6 +88,30 @@ curl -s -X POST http://localhost:5000/api/messages/assistant \
 ```
 
 图片文件放在 `static/images/` 下即可。
+
+## 回复前置检查：check_reply.py
+
+在生成回复**之前**先跑一次检查脚本，拿到当前时间、时段、待回复消息、最近对话脉络、近 3 天已讲过的内容、可发图片与随机骰子——避免「凭印象写回复」。
+
+```bash
+python check_reply.py            # 输出带缩进的 JSON 简报
+python check_reply.py --compact  # 单行 JSON，便于管道处理
+```
+
+关键字段：
+
+| 字段 | 含义 |
+|---|---|
+| `now` / `now_phase` | 当前时间 / 时段（清晨…凌晨），写问候、提休息前必看 |
+| `has_reply` | 是否存在**待回复**的用户消息；`false` 时生成方应直接结束任务 |
+| `pending` | 待回复的用户消息列表 |
+| `context` | 最近 40 条对话脉络（`u:` 用户 / `x:` 陪伴者，含图片标记） |
+| `recent_replies` | 最近 3 天陪伴者的回复（**防复读**依据） |
+| `candidate_images` | 可发图片（已排除近期发过的） |
+| `img_roll` | 0~1 随机数；脚本只给骰子，是否带图由生成方按 `< 0.30` 决定 |
+| `learning` | 可选，读了 `learning.json` 则有值，否则为 null |
+
+脚本**只读不写**、不联网、不调用 LLM，仅依赖标准库，可安全高频运行。
 
 ## 人格蒸馏与回复生成
 
