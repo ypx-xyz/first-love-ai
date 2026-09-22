@@ -75,6 +75,8 @@ first-love-ai/
 └── persona/                  # 人格机制（纯技术描述）
     ├── personify_prompt.md   # 通用人格蒸馏 prompt（离线）
     ├── reply_prompt.md       # 回复生成 prompt（在线）
+    ├── drift_audit.py        # 漂移诊断脚本（生成后质量审计）
+    ├── drift_audit.md        # 漂移诊断机制说明
     ├── architecture.md       # 蒸馏引擎架构
     └── persona.example.json  # 人格画像示例（字段与 prompt 占位一一对应）
 ```
@@ -194,6 +196,17 @@ python reply.py --print-only          # 调用 LLM 但只打印结果，满意�
 配套示例 [`examples/send_reply.py`](examples/send_reply.py) 演示如何把生成的回复注入应用。
 
 蒸馏引擎只做统计与特征提取，不输出语料原文；请自行评估所用语料的合规性与授权。
+
+## 质量审计：漂移诊断
+
+长期运行的陪伴者会渐进偏离目标人格（套话复用、语气偏移、出戏）。
+[`persona/drift_audit.py`](persona/drift_audit.py) 定期把「虚拟回复」与「同期真实语料」做
+**客观风格对照**，输出可解读的统计简报，供 LLM 采样判断是否存在漂移；
+机制说明见 [`persona/drift_audit.md`](persona/drift_audit.md)。
+
+它与 [`check_reply.py`](check_reply.py) 互补：**check 管生成前拿到什么，drift_audit 管生成后像不像**。
+诊断结论回写回复 prompt 的约束项，形成「生成 → 审计 → 约束更新」的闭环——
+[`reply_prompt.md`](persona/reply_prompt.md) 中的约束 A/B/C/D 正是历次漂移修正的沉淀。
 
 ## 进阶：LLM + Wiki 协同模式
 
